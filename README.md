@@ -114,4 +114,19 @@ This experiment demonstrates that C provides no builtin memory safety. Errors li
 
 
 
-## Lab 2 : ?
+## Lab 2 : Min / Max via Multithreading 
+
+### 1. Objective
+
+The objective of this lab experiment is to design and implement a highperformance multithreaded C program to compute the minimum and maximum values from a set of N elements, and to evaluate its performance against a sequential approach.
+
+**Key Focus Areas:**
+
+* Understanding **parallel reduction** techniques for min–max computation.
+* Analyzing **scalability** of the multithreaded solution as input size **N increases**.
+* Comparing **execution time** of multithreaded and sequential implementations.
+* Ensuring **correctness and consistency** of results across multiple runs.
+* Measuring and observing performance for varying input sizes:
+  **N = 512, 1024, 2048, 4096, 8192**.
+
+
