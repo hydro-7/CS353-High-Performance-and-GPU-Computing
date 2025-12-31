@@ -19,7 +19,7 @@ The objective of this lab experiment is to study common memory-related issues in
 * Analyzing **Heap Memory Errors**.
 * Understanding the importance of compiler diagnostics and runtime checks.
 
----
+
 
 ### 2. Tools & Compilation Setup
 
@@ -37,7 +37,7 @@ gcc -fsanitize=address -g file.c
 
 ```
 
----
+
 
 ### 3. Experiments & Observations
 
@@ -99,7 +99,7 @@ printf("%d\n", arr[0]);
 * **With Flags:** **`unknown address`** error.
 * **Conclusion:** Sanitizers improve diagnostic clarity by pinpointing exactly where the invalid memory access occurred.
 
----
+
 
 ### 4. Final Conclusion
 
@@ -129,4 +129,50 @@ The objective of this lab experiment is to design and implement a highperformanc
 * Measuring and observing performance for varying input sizes:
   **N = 512, 1024, 2048, 4096, 8192**.
 
+
+### 2. Implementation Strategy
+
+To achieve high-performance results, the following strategies were implemented:
+
+* **Domain Decomposition:** The input array is divided into  equal-sized chunks, where each chunk is assigned to a separate POSIX thread (**Pthread**).
+* **Local Reduction:** Each thread independently computes the local minimum and maximum of its assigned range to avoid synchronization overhead (like mutexes) within the loop.
+* **Global Aggregation:** Once all threads finish execution (`pthread_join`), the main thread performs a final reduction on the local results to determine the global min/max.
+
+### 3. Experiments & Methodology
+
+The lab was divided into two distinct phases of experimentation:
+
+#### **Part 1: Performance Scaling (prog1.c)**
+
+We compared the multithreaded approach (8 threads) against a sequential approach across two distinct ranges of :
+
+1. **Small Scale ( to ):** To observe the impact of **thread creation overhead** and context switching.
+2. **Large Scale ( to ):** To observe the **speedup** provided by parallel execution on compute-heavy tasks.
+
+#### **Part 2: Thread Optimization & Logging (prog2.c)**
+
+We automated an experiment to find the "Sweet Spot" for concurrency:
+
+* **Variable Threading:** Tested thread counts from **1 to 100** (increments of 5).
+* **Data Logging:** All results (Thread count, , Min, Max, Time) were logged to `log.txt`.
+* **Optimal Configuration Search:** The program identifies the thread count that yields the lowest total execution time across all test cases.
+
+### 4. Observations & Results
+
+| Configuration | Small N Observations | Large N Observations |
+| --- | --- | --- |
+| **Sequential** | **Faster.** Low overhead; the CPU finishes the task before a thread can even be spawned. | **Slower.** Bound by a single core's clock speed. |
+| **Multithreaded** | **Slower.** The time taken for `pthread_create` and `pthread_join` exceeds the computation time. | **Faster.** Drastic reduction in execution time as work is distributed across CPU cores. |
+
+#### **Key Findings:**
+
+1. **Consistency:** In all runs, `T-Min == S-Min` and `T-Max == S-Max`, proving the reliability of the parallel reduction logic.
+2. **Scalability:** The program demonstrates **Linear Scalability** for large , where doubling the input size results in a predictable change in execution time.
+3. **The Over-threading Penalty:** In `prog2.c`, we observed that performance improves as thread count approaches the number of logical CPU cores, but degrades significantly when threads exceed 50+ due to **excessive context switching**.
+
+### 5. Conclusion
+
+This experiment highlights that **parallelism is not a "silver bullet."** For small datasets, the overhead of managing threads outweighs the benefits of parallel processing. However, for high-performance computing tasks involving millions of elements, multithreading is essential for reducing latency. The optimal performance is typically achieved when the number of threads matches the hardware's logical core count.
+
+---
 
