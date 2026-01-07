@@ -176,3 +176,226 @@ This experiment highlights that **parallelism is not a "silver bullet."** For sm
 
 ---
 
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Lab 3 -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Lab 3 : Parallel Sum Computation Using Threads and Memory Access Analysis
+
+### 1. Objective
+The objective of this experiment is to study and analyze the performance impact of different parallel programming and memory access strategies in C. Specifically, the experiment focuses on:
+- Dynamically allocating a large array of **5,00,000 elements**
+- Creating **200 parallel threads** to compute the sum of these elements
+- Comparing multiple synchronization and memory access approaches
+- Observing how design choices affect execution time and scalability
+
+
+### 2. Implementation Strategy
+
+The experiment was implemented using **POSIX Threads (pthreads)** in C.  
+Two separate source files were created, each focusing on a different performance aspect:
+
+#### 2.1 `global_vs_local.c`
+This file compares two approaches for accumulating partial sums computed by threads.
+
+##### Approach 1: Global Sum with Mutex Locking
+Each thread computes a partial sum and updates a shared global variable using a mutex.
+
+```c
+pthread_mutex_lock(&lock);
+global_sum += local_sum;
+pthread_mutex_unlock(&lock);
+````
+
+This approach ensures correctness but introduces heavy synchronization overhead.
+
+
+
+##### Approach 2: Thread-Local Sum (Reduced Locking)
+
+Each thread maintains its own private sum and avoids locking during computation.
+
+```c
+long long thread_sum = 0;
+for (int i = start; i < end; i++) {
+    thread_sum += arr[i];
+}
+partial_sums[thread_id] = thread_sum;
+```
+
+All partial sums are combined after all threads complete execution.
+
+
+
+#### 2.2 `ptr_vs_idx.c`
+
+This file analyzes the impact of different array access methods on performance.
+
+##### Approach 1: Pointer-Based Access
+
+The array is accessed using pointer arithmetic.
+
+```c
+sum += *(ptr + i);
+```
+
+Although functionally correct, this approach showed slower execution in practice.
+
+
+
+##### Approach 2: Direct Index-Based Access
+
+The array is accessed using standard indexing.
+
+```c
+sum += arr[i];
+```
+
+This method consistently performed better during experiments.
+
+
+
+### 3. Experiments & Methodology
+
+#### 3.1 Experimental Setup
+
+* Number of elements: **5,00,000**
+* Number of threads: **200**
+* Platform: Linux-based system
+* Compiler: `gcc` with pthread support
+* Timing measured using high-resolution timers
+
+#### 3.2 Methodology
+
+1. Initialize the dynamically allocated array with known values.
+2. Divide the array evenly among all threads.
+3. Execute each approach independently.
+4. Measure total execution time for each method.
+5. Compare results based on performance and correctness.
+
+Each test was run multiple times to ensure consistency.
+
+
+
+### 4. Observations & Results
+
+#### 4.1 Mutex-Based Global Sum
+
+* Execution time was **significantly higher**.
+* Threads frequently blocked while waiting for the mutex.
+* High contention caused serialized execution despite multiple threads.
+
+**Observation:**
+Mutex locking inside frequently executed code sections severely degrades performance in highly parallel workloads.
+
+
+
+#### 4.2 Thread-Local Sum
+
+* Execution time was **much lower**.
+* Threads executed independently without synchronization overhead.
+* Only a final aggregation step was required.
+
+**Observation:**
+Using thread-local variables reduces contention and allows true parallelism, making it the most efficient approach.
+
+
+
+#### 4.3 Pointer-Based Array Access (`*(ptr + index)`)
+
+* Observed to be **slower** than index-based access.
+* Requires additional address computation at runtime.
+* Less friendly to compiler optimizations such as auto-vectorization.
+
+**Reason for Slower Performance:**
+Pointer arithmetic involves explicit address calculation for every access, which can inhibit certain compiler optimizations. It also complicates alias analysis, preventing aggressive instruction reordering and cache prefetching.
+
+
+
+#### 4.4 Index-Based Array Access (`arr[index]`)
+
+* Observed to be **faster** and more consistent.
+* Compiler can better optimize indexed access.
+* Improved cache locality and instruction-level parallelism.
+
+**Reason for Faster Performance:**
+Array indexing provides clearer memory access patterns to the compiler, enabling optimizations such as loop unrolling, vectorization, and efficient cache utilization.
+
+
+
+### 5. Conclusion
+
+From this experiment, the following conclusions were drawn:
+
+* Excessive mutex usage can nullify the benefits of multithreading.
+* Thread-local computation with minimal synchronization yields the best performance.
+* Memory access patterns significantly impact execution time.
+* Direct array indexing is generally faster and more optimization-friendly than pointer arithmetic.
+
+Overall, careful synchronization and memory-access design are essential for high-performance parallel programs.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Lab 3 -->
+
+
+
+
+
+
+
+
