@@ -390,12 +390,128 @@ Overall, careful synchronization and memory-access design are essential for high
 
 
 
-<!-- Lab 3 -->
+<!-- Lab 4 -->
 
 
 
+## Lab 4: Parallel Sparse Matrix Multiplication using Pthreads
+
+### 1. Objective
+
+To implement and benchmark parallel sparse matrix multiplication using POSIX Threads (Pthreads). The primary goal is to analyze the trade offs between synchronization overhead and load balancing by comparing five different thread scheduling strategies.
+
+### 2. Problem Statement
+
+Sparse matrix multiplication presents a unique challenge for parallelization due to **irregular workloads**. Unlike dense matrices, where every row computation takes the same amount of time, sparse matrix rows vary significantly in the number of non zero elements.
+
+* **Static assignment** often leads to **load imbalance** (some cores idle while others work).
+* **Dynamic assignment** fixes imbalance but introduces **critical section overhead** (locking).
+* **Goal:** Determine which scheduling approach minimizes execution time and maximizes core utilization.
+
+### 3. Methodology & Approaches
+
+We investigated five specific scheduling strategies to distribute the row-wise multiplication tasks across  threads.
+
+#### **A. Static Scheduling**
+
+1. **Block Scheduling:** The matrix is divided into  continuous blocks. Thread  processes rows .
+* *Observation:* Fastest when data is uniform; prone to severe imbalance if non-zeros are clustered.
+
+
+2. **Cyclic Scheduling:** Rows are distributed in a round-robin fashion (Thread  processes rows ).
+* *Observation:* Statistically better load balancing than Block scheduling without the cost of locks, but suffers from poorer cache locality.
 
 
 
+#### **B. Dynamic Scheduling**
+
+3. **Fine-Grained:** Threads lock a mutex to grab a **single row** index from a global counter.
+* *Observation:* Perfect load balancing but prohibitive synchronization overhead due to frequent locking.
 
 
+4. **Chunked:** Threads lock a mutex to grab a fixed-size **chunk** (e.g., 64 rows).
+* *Observation:* A compromise that reduces lock contention while maintaining good load balance.
+
+
+5. **Guided:** Threads grab chunks that exponentially decrease in size.
+* *Observation:* Optimizes overhead at the start (large chunks) and fairness at the end (small chunks).
+
+
+
+### 4. Key Implementation Details
+
+The core logic relies on a shared "row kernel" and varying thread functions.
+
+**The Core Kernel (Row Multiplication):**
+
+```c
+// Computes a single row result for C = A * B
+void compute_row(int r, CSRMatrix *A, CSRMatrix *B, double *C) {
+    for (int j = A->row_ptr[r]; j < A->row_ptr[r+1]; j++) {
+        int col_a = A->col_ind[j];
+        double val_a = A->values[j];
+        // Accumulate partial products
+        for (int k = B->row_ptr[col_a]; k < B->row_ptr[col_a+1]; k++) {
+            C[r * N + B->col_ind[k]] += val_a * B->values[k];
+        }
+    }
+}
+
+```
+
+**Algorithm for Dynamic Scheduling (Generalized):**
+
+```text
+Global: row_counter = 0, Mutex Lock
+
+Thread Function:
+    Loop until row_counter >= Total_Rows:
+        Lock Mutex
+        Get current row_counter
+        Increment row_counter by CHUNK_SIZE
+        Unlock Mutex
+        
+        Process rows [current ... current + CHUNK_SIZE]
+
+```
+
+**Running the commands:**
+
+```bash
+gcc -O3 -pthread prog.c -o prog
+./prog
+
+```
+
+### 5. Performance Analysis & Discussion
+
+#### **Q1: Minimizing Execution Time**
+
+Our benchmarking indicates that execution time follows a "U-curve" relative to the thread count.
+
+* **Optimal Thread Count:** The minimum execution time was consistently achieved when the number of threads matched the number of physical CPU cores (typically 4-8 on standard machines).
+* **Over-Subscription:** Increasing threads beyond the physical core count (e.g., 32 threads on an 8-core machine) increased execution time. This is due to **Context Switching overhead**, where the OS wastes cycles switching between active threads rather than performing computation.
+* **Memory Bottleneck:** As the thread count rose, the performance gains diminished due to saturation of the memory bandwidth, confirming that sparse matrix multiplication is memory-bound.
+
+#### **Q2: Improving Fair Core Utilization**
+
+Achieving 100% utilization of all cores required addressing the irregular data structure.
+
+* **Why Static Failed:** Static Block scheduling resulted in "tail latency," where one thread working on a dense section of the matrix kept the program running long after other threads had finished and idled.
+* **The Optimal Solution:** The **Dynamic Guided** and **Dynamic Chunked** approaches provided the best core utilization. By decoupling row assignment from thread ID, these methods ensured that "light" threads effectively picked up the slack for "heavy" threads. The **Guided** approach specifically excelled by minimizing the "fight for the lock" at the beginning of execution while ensuring granular balancing at the end.
+
+### 6. Results
+
+*Test Environment: Matrix Size , Sparsity .*
+
+| Approach Name | Best Time (s) | Optimal Threads |
+| --- | --- | --- |
+| **Static (Block)** | *0.0217* | *16* |
+| **Dynamic (Fine)** | *0.0203* | *16* |
+| **Dynamic (Chunked)** | *0.0202* | *16* |
+| **Static (Cyclic)** | *0.0239* | *16* |
+| **Dynamic (Guided)** | *0.0205* | *16* |
+
+### 7. Conclusion
+
+This experiment demonstrated that for irregular workloads like sparse matrix operations, Dynamic approaches typically offer the best trade-off between overhead and load balancing. While Static approaches are faster for uniform data, they fail to utilize multi-core architectures efficiently when data density varies.
