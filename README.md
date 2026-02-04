@@ -515,3 +515,185 @@ Achieving 100% utilization of all cores required addressing the irregular data s
 ### 7. Conclusion
 
 This experiment demonstrated that for irregular workloads like sparse matrix operations, Dynamic approaches typically offer the best trade-off between overhead and load balancing. While Static approaches are faster for uniform data, they fail to utilize multi-core architectures efficiently when data density varies.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Lab 5 -->
+
+
+
+
+
+
+
+## Lab 5: Parallel Reduction & Sorting Check (OpenMP vs Pthreads)
+
+### 1. Objective
+The objective of this lab is to explore parallel programming paradigms using OpenMP and POSIX Threads (Pthreads). Specifically, the lab aims to:
+1.  Implement **parallel reduction** to compute the sum, minimum, and maximum of a large array efficiently.
+2.  Design and compare three different parallel approaches (OpenMP Shared Flag, OpenMP Reduction, and Manual Pthreads) to check if a large list is sorted.
+3.  Analyze the performance trade-offs, execution time, and CPU core utilization of these approaches.
+
+---
+
+### 2. Task 1: Min, Max, and Sum using OpenMP
+
+#### 2.1 Approach & Explanation
+In this task, we process a large array (500 million elements) to find the sum, minimum, and maximum values.
+
+* **Concept (Layman):** Imagine counting a huge stack of cash. Instead of one person counting it all, you split the stack among 4 people. Each person counts their pile and finds the smallest/largest bill. At the end, they combine their totals to get the final result.
+* **Technical Design:**
+    * We use the `#pragma omp parallel for` directive to parallelize the loop.
+    * **The Reduction Clause:** The key mechanism is `reduction(+:sum) reduction(min:min_val) reduction(max:max_val)`.
+    * OpenMP automatically creates a **private copy** of these variables for each thread to prevent race conditions. Each thread works on its local copy, and at the end of the parallel region, OpenMP combines them using the specified operator (`+`, `min`, `max`).
+
+#### 2.2 Compilation & Execution
+**Command used:**
+```bash
+gcc -O3 -fopenmp prog1.c -o prog1
+./prog1
+
+```
+
+#### 2.3 Observations
+
+Based on the execution with 500 million elements:
+
+| Execution Type | Time (seconds) |
+| --- | --- |
+| **Serial (Single Core)** | 0.284774 |
+| **Parallel (OpenMP)** | 0.152710 |
+
+* **Speedup:** The parallel implementation is approximately **1.86x faster** than the serial version.
+* **Verification:** The sum, min, and max values matched exactly between serial and parallel executions, confirming correctness.
+
+<img width="636" height="214" alt="image" src="https://github.com/user-attachments/assets/8eda065a-9167-45b2-8242-1e136e553397" />
+
+---
+
+### 3. Task 2: Parallel Sorted Check (Comparison of 3 Approaches)
+
+#### 3.1 Approaches Designed
+
+We implemented three distinct strategies to check if an array is sorted in ascending order.
+
+**Approach 1: OpenMP with Shared Flag (Simulated Early Exit)**
+
+* **Concept:** Like a group of inspectors looking for a defect. If anyone finds one, they shout "Stop!", and everyone stops working.
+* **Technical:** Uses a `volatile bool sorted` shared flag. Threads constantly check `if (!sorted) continue;` inside the loop.
+* **Trade-off:** Fast for unsorted lists (early exit), but suffers from **cache coherence traffic** (CPUs constantly talking to ensure they have the latest flag value).
+
+**Approach 2: OpenMP with Reduction (Count Violations)**
+
+* **Concept:** Inspectors work in isolation. They don't talk to each other. They just write down how many errors they found. At the very end, we sum up the errors.
+* **Technical:** Uses `#pragma omp parallel for reduction(+:violations)`. Threads maintain private counters and merge them at the end.
+* **Trade-off:** Very high CPU utilization and throughput for *sorted* lists (no synchronization overhead), but wasteful for unsorted lists as it cannot stop early.
+
+**Approach 3: Manual Pthreads (Data Decomposition)**
+
+* **Concept:** Manually assigning specific chunks of work to specific workers. "Worker A, you take items 0 to 100. Worker B, you take 101 to 200."
+* **Technical:** We calculate `start` and `end` indices manually and use `pthread_create` to spawn threads. We handle the "boundary condition" (checking `arr[i] > arr[i+1]` across thread chunks) explicitly.
+* **Trade-off:** Provides low-level control but incurs higher **thread creation overhead** compared to OpenMP's optimized thread pool.
+
+#### 3.2 Compilation & Execution
+
+**Command used:**
+
+```bash
+g++ -O3 -fopenmp -pthread prog2.cpp -o prog2
+./prog2
+
+```
+
+
+#### 3.3 Observations & Analysis
+
+**Performance Data:**
+
+| List Size | OMP Flag (s) | OMP Reduction (s) | Pthreads (s) |
+| --- | --- | --- | --- |
+| **10,000** | 0.000007 | 0.000011 | 0.000602 |
+| **1,000,000** | 0.000158 | 0.000049 | 0.000658 |
+| **10,000,000** | 0.001891 | 0.001036 | 0.001836 |
+
+<img width="1085" height="245" alt="image" src="https://github.com/user-attachments/assets/1faff32c-eeff-42b9-bd0d-bae442445596" />
+
+**1. Execution Time Analysis:**
+
+* **Small Lists:** Manual Pthreads is significantly slower (e.g., 0.0006s vs 0.000007s for size 10k). This is due to the overhead of creating new OS threads, whereas OpenMP reuses threads effectively.
+* **Large Lists:** OMP Reduction becomes the fastest approach (0.0010s vs 0.0018s for OMP Flag). The lack of synchronization during the loop allows it to scale better than the Shared Flag approach.
+
+<img width="1200" height="600" alt="image" src="https://github.com/user-attachments/assets/2ad9096f-900a-4cc6-be73-4a81f4a24858" />
+
+
+**2. CPU Utilization Analysis:**
+
+* **OMP Reduction:** Achieved **100% CPU utilization** consistently across larger sizes. This confirms that cores were fully saturated with work without waiting for locks or flags.
+* **Manual Pthreads:** Showed lower utilization (~28% max) in this specific run, likely due to the overhead dominance relative to the actual computation work.
+
+<img width="1200" height="600" alt="image" src="https://github.com/user-attachments/assets/29ba0f74-84e0-4667-ae48-db3f5df59dfc" />
+
+---
+
+### 4. Conclusion
+
+1. **Reduction Efficiency:** For aggregating data (Sum/Min/Max), OpenMP reductions are highly efficient and require minimal code changes compared to serial versions.
+2. **Overhead Matters:** For small datasets, the overhead of creating manual threads (Pthreads) far outweighs the parallel speedup. OpenMP handles this much better.
+3. **Synchronization vs. Throughput:**
+* **Shared Flag** is best when we expect to fail early (unsorted data).
+* **Reduction** is best when we expect to process the whole dataset (sorted data) because it eliminates communication overhead during the loop.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Lab 6 -->
+
+
